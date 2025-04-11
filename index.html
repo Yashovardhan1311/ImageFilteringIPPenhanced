@@ -1,58 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Filter Studio</title>
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Filtering</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>Image Filter Studio</h1>
-        <div class="upload-section">
-            <label for="imageUpload" class="upload-label">
-                <span>Drag & Drop or Click to Upload Image</span>
-                <input type="file" id="imageUpload" accept="image/*">
-            </label>
-        </div>
-        <div class="editor-section">
-            <div class="canvas-container">
-                <canvas id="imageCanvas"></canvas>
-                <div class="canvas-placeholder">Upload an image to start editing</div>
-            </div>
-            <div class="controls">
-                <div class="filter-buttons">
-                    <button onclick="applyFilter('blur')">Blur</button>
-                    <button onclick="applyFilter('sharpen')">Sharpen</button>
-                    <button onclick="applyFilter('invert')">Invert</button>
-                    <button onclick="applyFilter('smoothen')">Smoothen</button>
-                    <button onclick="applyFilter('grayscale')">Grayscale</button>
-                    <button onclick="resetFilters()">Reset</button>
-                </div>
-                <div class="sliders">
-                    <div class="slider-group">
-                        <label for="intensity">Intensity: <span id="intensityValue">100%</span></label>
-                        <input type="range" id="intensity" min="0" max="100" value="100">
-                    </div>
-                    <div class="slider-group">
-                        <label for="brightness">Brightness: <span id="brightnessValue">100%</span></label>
-                        <input type="range" id="brightness" min="0" max="200" value="100">
-                    </div>
-                    <div class="slider-group">
-                        <label for="contrast">Contrast: <span id="contrastValue">100%</span></label>
-                        <input type="range" id="contrast" min="0" max="200" value="100">
-                    </div>
-                </div>
-                <div class="extra-controls">
-                    <button onclick="undo()">Undo</button>
-                    <button onclick="redo()">Redo</button>
-                    <button onclick="savePreset()">Save Preset</button>
-                    <button onclick="downloadImage()">Download</button>
-                </div>
-            </div>
-        </div>
+  <h1>Image Filtering</h1>
+  <input type="file" id="upload" accept="image/*">
+  
+  <div class="canvas-container">
+    <div class="canvas-wrapper">
+      <h2>Original</h2>
+      <canvas id="originalCanvas"></canvas>
+      <div id="cropOverlay" class="crop-overlay"></div>
     </div>
-    <script src="script.js"></script>
+    <div class="canvas-wrapper">
+      <h2>Filtered</h2>
+      <canvas id="filteredCanvas"></canvas>
+    </div>
+  </div>
+  
+  <div class="controls">
+    <button onclick="handleFilter('blur')">Blur</button>
+    <button onclick="handleFilter('sharpen')">Sharpen</button>
+    <button onclick="handleFilter('invert')">Invert</button>
+    <button onclick="handleFilter('smooth')">Smoothen</button>
+    <button onclick="handleFilter('grayscale')">Grayscale</button>
+    <button onclick="resetFiltered()">Reset Filter</button>
+    <button id="downloadBtn" onclick="downloadFiltered()">Download</button>
+    <button onclick="startCrop()">Crop</button>
+    <button onclick="applyCrop()">Apply Crop</button>
+    <button onclick="rotateImage(90)">Rotate 90°</button>
+    <button onclick="flipImage('horizontal')">Flip Horizontal</button>
+    <button onclick="flipImage('vertical')">Flip Vertical</button>
+    <button id="beforeAfterBtn" onclick="toggleBeforeAfter()">Before/After</button>
+  </div>
+  
+  <div class="sliders">
+    <div class="slider-container">
+      <label for="intensity">Intensity: <span id="intensityValue">1.0</span></label><br>
+      <input type="range" id="intensity" min="0" max="2" step="0.1" value="1">
+    </div>
+    <div class="slider-container">
+      <label for="brightness">Brightness: <span id="brightnessValue">0</span></label><br>
+      <input type="range" id="brightness" min="-100" max="100" step="1" value="0">
+    </div>
+    <div class="slider-container">
+      <label for="contrast">Contrast: <span id="contrastValue">1.0</span></label><br>
+      <input type="range" id="contrast" min="0" max="2" step="0.1" value="1">
+    </div>
+    <div class="slider-container">
+      <label for="hue">Hue: <span id="hueValue">0</span></label><br>
+      <input type="range" id="hue" min="0" max="360" step="1" value="0">
+    </div>
+    <div class="slider-container">
+      <label for="saturation">Saturation: <span id="saturationValue">1.0</span></label><br>
+      <input type="range" id="saturation" min="0" max="2" step="0.1" value="1">
+    </div>
+  </div>
+
+  <footer>Made By Yashovardhan Pratap Singh</footer>
+  
+  <script src="script.js"></script>
 </body>
 </html>
