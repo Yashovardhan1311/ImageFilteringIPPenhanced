@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Filtering Studio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Image Filtering Studio</h1>
+    <button id="themeToggle" title="Toggle Dark Mode">🌙</button>
+  </header>
+  
+  <div class="upload-container" id="dropArea">
+    <input type="file" id="upload" accept="image/*">
+    <p>Drag & drop an image here or click to upload</p>
+  </div>
+  
+  <div class="canvas-container">
+    <div class="canvas-wrapper">
+      <h2>Original</h2>
+      <div class="canvas-zoom">
+        <canvas id="originalCanvas"></canvas>
+      </div>
+    </div>
+    <div class="canvas-wrapper">
+      <h2>Filtered</h2>
+      <div class="canvas-zoom">
+        <canvas id="filteredCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <div class="zoom-controls">
+    <button id="zoomIn" title="Zoom In">+</button>
+    <button id="zoomOut" title="Zoom Out">-</button>
+    <button id="resetZoom" title="Reset Zoom">↺</button>
+  </div>
+  
+  <div class="controls" id="controlsPanel">
+    <button class="toggle-controls" id="toggleControls">Hide Controls</button>
+    <div class="filter-buttons">
+      <button onmouseover="previewFilter('blur')" onmouseout="clearPreview()" onclick="handleFilter('blur')" title="Apply Blur">Blur</button>
+      <button onmouseover="previewFilter('sharpen')" onmouseout="clearPreview()" onclick="handleFilter('sharpen')" title="Apply Sharpen">Sharpen</button>
+      <button onmouseover="previewFilter('invert')" onmouseout="clearPreview()" onclick="handleFilter('invert')" title="Apply Invert">Invert</button>
+      <button onmouseover="previewFilter('smooth')" onmouseout="clearPreview()" onclick="handleFilter('smooth')" title="Apply Smooth">Smoothen</button>
+      <button onmouseover="previewFilter('grayscale')" onmouseout="clearPreview()" onclick="handleFilter('grayscale')" title="Apply Grayscale">Grayscale</button>
+      <button onmouseover="previewFilter('sepia')" onmouseout="clearPreview()" onclick="handleFilter('sepia')" title="Apply Sepia">Sepia</button>
+      <button onmouseover="previewFilter('edge')" onmouseout="clearPreview()" onclick="handleFilter('edge')" title="Apply Edge Detection">Edge</button>
+      <button onmouseover="previewFilter('emboss')" onmouseout="clearPreview()" onclick="handleFilter('emboss')" title="Apply Emboss">Emboss</button>
+      <button onmouseover="previewFilter('posterize')" onmouseout="clearPreview()" onclick="handleFilter('posterize')" title="Apply Posterize">Posterize</button>
+    </div>
+    <div class="action-buttons">
+      <button onclick="undo()" title="Undo (Ctrl+Z)">Undo</button>
+      <button onclick="redo()" title="Redo (Ctrl+Y)">Redo</button>
+      <button onclick="resetFiltered()" title="Reset All">Reset</button>
+      <button id="downloadBtn" onclick="downloadFiltered()" title="Download Image">Download</button>
+    </div>
+    <div class="presets">
+      <input type="text" id="presetName" placeholder="Preset Name">
+      <button onclick="savePreset()" title="Save Current Settings">Save Preset</button>
+      <select id="presetSelect" onchange="loadPreset()">
+        <option value="">Select Preset</option>
+      </select>
+    </div>
+    <div class="sliders">
+      <div class="slider-container">
+        <label for="intensity">Intensity: <span id="intensityValue">1.0</span></label><br>
+        <input type="range" id="intensity" min="0" max="2" step="0.1" value="1">
+      </div>
+      <div class="slider-container">
+        <label for="brightness">Brightness: <span id="brightnessValue">0</span></label><br>
+        <input type="range" id="brightness" min="-100" max="100" step="1" value="0">
+      </div>
+      <div class="slider-container">
+        <label for="contrast">Contrast: <span id="contrastValue">1.0</span></label><br>
+        <input type="range" id="contrast" min="0" max="2" step="0.1" value="1">
+      </div>
+    </div>
+  </div>
+  
+  <div class="loading" id="loadingIndicator">
+    <div class="spinner"></div>
+  </div>
+
+  <footer>Made By Yashovardhan Pratap Singh</footer>
+  
+  <script src="script.js"></script>
+</body>
+</html>
