@@ -1,211 +1,383 @@
-const canvas = document.getElementById('imageCanvas');
-const ctx = canvas.getContext('2d');
-let image = new Image();
-let history = [];
-let redoStack = [];
-let currentFilters = {
-    blur: 0,
-    brightness: 100,
-    contrast: 100,
-    invert: 0,
-    grayscale: 0
-};
+const originalCanvas = document.getElementById('originalCanvas');
+const filteredCanvas = document.getElementById('filteredCanvas');
+const origCtx = originalCanvas.getContext('2d');
+const filtCtx = filteredCanvas.getContext('2d');
+const cropOverlay = document.getElementById('cropOverlay');
 
-document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
-document.getElementById('intensity').addEventListener('input', updateSliderValue);
-document.getElementById('brightness').addEventListener('input', updateSliderValue);
-document.getElementById('contrast').addEventListener('input', updateSliderValue);
+let originalImageData = null;
+let currentFilter = null;
+let img = new Image();
+let intensity = 1;
+let brightness = 0;
+let contrast = 1;
+let hue = 0;
+let saturation = 1;
+let isCropping = false;
+let cropStartX, cropStartY, cropEndX, cropEndY;
+let rotation = 0;
+let flipH = 1, flipV = 1;
+let showOriginal = false;
 
-// Drag and Drop
-const uploadSection = document.querySelector('.upload-section');
-uploadSection.addEventListener('dragover', (e) => e.preventDefault());
-uploadSection.addEventListener('drop', (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-        loadImage(file);
-    } else {
-        alert('Please upload a valid image file.');
-    }
+function adjustCanvasSizes(width, height) {
+  originalCanvas.width = filteredCanvas.width = width;
+  originalCanvas.height = filteredCanvas.height = height;
+}
+
+document.getElementById('upload').addEventListener('change', function(e) {
+  if (e.target.files && e.target.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      img.onload = function() {
+        const maxWidth = 600;
+        const maxHeight = 600;
+        let width = img.width;
+        let height = img.height;
+        const scaleFactor = Math.min(maxWidth / width, maxHeight / height, 1);
+        width = width * scaleFactor;
+        height = height * scaleFactor;
+        
+        adjustCanvasSizes(width, height);
+        drawImage();
+        originalImageData = origCtx.getImageData(0, 0, width, height);
+        applyAdjustments();
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(e.target.files[0]);
+  }
 });
 
-function handleImageUpload(e) {
-    const file = e.target.files[0];
-    if (file && file.type.startsWith('image/')) {
-        loadImage(file);
+// Slider event listeners
+const intensitySlider = document.getElementById('intensity');
+const brightnessSlider = document.getElementById('brightness');
+const contrastSlider = document.getElementById('contrast');
+const hueSlider = document.getElementById('hue');
+const saturationSlider = document.getElementById('saturation');
+
+intensitySlider.addEventListener('input', function(e) {
+  intensity = parseFloat(e.target.value);
+  document.getElementById('intensityValue').textContent = intensity.toFixed(1);
+  applyAdjustments();
+});
+
+brightnessSlider.addEventListener('input', function(e) {
+  brightness = parseInt(e.target.value);
+  document.getElementById('brightnessValue').textContent = brightness;
+  applyAdjustments();
+});
+
+contrastSlider.addEventListener('input', function(e) {
+  contrast = parseFloat(e.target.value);
+  document.getElementById('contrastValue').textContent = contrast.toFixed(1);
+  applyAdjustments();
+});
+
+hueSlider.addEventListener('input', function(e) {
+  hue = parseInt(e.target.value);
+  document.getElementById('hueValue').textContent = hue;
+  applyAdjustments();
+});
+
+saturationSlider.addEventListener('input', function(e) {
+  saturation = parseFloat(e.target.value);
+  document.getElementById('saturationValue').textContent = saturation.toFixed(1);
+  applyAdjustments();
+});
+
+// Crop functionality
+function startCrop() {
+  isCropping = true;
+  cropOverlay.style.display = 'block';
+  cropOverlay.style.left = '0px';
+  cropOverlay.style.top = '0px';
+  cropOverlay.style.width = '0px';
+  cropOverlay.style.height = '0px';
+
+  originalCanvas.addEventListener('mousedown', startCropDrag);
+  originalCanvas.addEventListener('mousemove', updateCropDrag);
+  originalCanvas.addEventListener('mouseup', endCropDrag);
+}
+
+function startCropDrag(e) {
+  const rect = originalCanvas.getBoundingClientRect();
+  cropStartX = e.clientX - rect.left;
+  cropStartY = e.clientY - rect.top;
+}
+
+function updateCropDrag(e) {
+  if (!isCropping) return;
+  const rect = originalCanvas.getBoundingClientRect();
+  cropEndX = e.clientX - rect.left;
+  cropEndY = e.clientY - rect.top;
+
+  const x = Math.min(cropStartX, cropEndX);
+  const y = Math.min(cropStartY, cropEndY);
+  const width = Math.abs(cropEndX - cropStartX);
+  const height = Math.abs(cropEndY - cropStartY);
+
+  cropOverlay.style.left = `${x}px`;
+  cropOverlay.style.top = `${y}px`;
+  cropOverlay.style.width = `${width}px`;
+  cropOverlay.style.height = `${height}px`;
+}
+
+function endCropDrag() {
+  isCropping = false;
+  originalCanvas.removeEventListener('mousedown', startCropDrag);
+  originalCanvas.removeEventListener('mousemove', updateCropDrag);
+  originalCanvas.removeEventListener('mouseup', endCropDrag);
+}
+
+function applyCrop() {
+  if (!originalImageData) return;
+  const x = Math.min(cropStartX, cropEndX);
+  const y = Math.min(cropStartY, cropEndY);
+  const width = Math.abs(cropEndX - cropStartX);
+  const height = Math.abs(cropEndY - cropStartY);
+
+  const croppedData = origCtx.getImageData(x, y, width, height);
+  adjustCanvasSizes(width, height);
+  origCtx.putImageData(croppedData, 0, 0);
+  originalImageData = croppedData;
+  applyAdjustments();
+  cropOverlay.style.display = 'none';
+}
+
+// Rotate and Flip
+function rotateImage(degrees) {
+  rotation = (rotation + degrees) % 360;
+  drawImage();
+  originalImageData = origCtx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+  applyAdjustments();
+}
+
+function flipImage(direction) {
+  if (direction === 'horizontal') flipH *= -1;
+  if (direction === 'vertical') flipV *= -1;
+  drawImage();
+  originalImageData = origCtx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+  applyAdjustments();
+}
+
+function drawImage() {
+  origCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+  origCtx.save();
+  origCtx.translate(originalCanvas.width / 2, originalCanvas.height / 2);
+  origCtx.rotate(rotation * Math.PI / 180);
+  origCtx.scale(flipH, flipV);
+  origCtx.drawImage(img, -originalCanvas.width / 2, -originalCanvas.height / 2, originalCanvas.width, originalCanvas.height);
+  origCtx.restore();
+}
+
+// Before/After Toggle
+function toggleBeforeAfter() {
+  showOriginal = !showOriginal;
+  if (showOriginal) {
+    filtCtx.putImageData(originalImageData, 0, 0);
+  } else {
+    applyAdjustments();
+  }
+}
+
+function resetFiltered() {
+  if (originalImageData) {
+    filtCtx.putImageData(originalImageData, 0, 0);
+    currentFilter = null;
+    intensity = 1;
+    brightness = 0;
+    contrast = 1;
+    hue = 0;
+    saturation = 1;
+    rotation = 0;
+    flipH = 1;
+    flipV = 1;
+    updateSliders();
+    applyAdjustments();
+  }
+}
+
+function handleFilter(filter) {
+  if (currentFilter === filter) {
+    console.log(`${filter} filter is already applied.`);
+    return;
+  }
+  currentFilter = filter;
+  applyAdjustments();
+}
+
+function applyFilter(imageData, filter) {
+  let output = imageData;
+  switch (filter) {
+    case 'blur':
+      output = convolution(imageData, [1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9]);
+      break;
+    case 'sharpen':
+      output = convolution(imageData, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
+      break;
+    case 'invert':
+      output = invert(imageData);
+      break;
+    case 'smooth':
+      output = convolution(imageData, [1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9]);
+      break;
+    case 'grayscale':
+      output = grayscale(imageData);
+      break;
+  }
+  return output;
+}
+
+function applyAdjustments() {
+  if (!originalImageData) return;
+  
+  let imageData = filtCtx.createImageData(originalImageData.width, originalImageData.height);
+  imageData.data.set(new Uint8ClampedArray(originalImageData.data));
+  let data = imageData.data;
+  
+  for (let i = 0; i < data.length; i += 4) {
+    // RGB to HSL conversion for hue and saturation
+    let r = data[i] / 255;
+    let g = data[i + 1] / 255;
+    let b = data[i + 2] / 255;
+    let max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+      h = s = 0;
     } else {
-        alert('Please upload a valid image file.');
+      let d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
     }
-}
 
-function loadImage(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-        image.src = reader.result;
-        image.onload = () => {
-            canvas.width = image.width;
-            canvas.height = image.height;
-            document.querySelector('.canvas-placeholder').style.display = 'none';
-            resetFilters();
-        };
-    };
-    reader.readAsDataURL(file);
-}
+    // Apply hue shift
+    h = (h + hue / 360) % 1;
+    if (h < 0) h += 1;
 
-function updateSliderValue(e) {
-    const id = e.target.id;
-    const value = e.target.value;
-    document.getElementById(`${id}Value`).textContent = `${value}%`;
-    currentFilters[id] = value;
-    applyFilters();
-}
+    // Apply saturation
+    s = Math.min(1, Math.max(0, s * saturation));
 
-function applyFilter(filter) {
-    saveState();
-    switch (filter) {
-        case 'blur':
-            currentFilters.blur = parseInt(document.getElementById('intensity').value) / 10;
-            break;
-        case 'sharpen':
-            applySharpen();
-            break;
-        case 'invert':
-            currentFilters.invert = currentFilters.invert ? 0 : 100;
-            break;
-        case 'smoothen':
-            applySmoothen();
-            break;
-        case 'grayscale':
-            currentFilters.grayscale = currentFilters.grayscale ? 0 : 100;
-            break;
+    // HSL to RGB conversion
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      let p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
     }
-    applyFilters();
+
+    // Apply brightness, contrast, and intensity
+    r = Math.min(1, Math.max(0, r + brightness / 255));
+    g = Math.min(1, Math.max(0, g + brightness / 255));
+    b = Math.min(1, Math.max(0, b + brightness / 255));
+
+    let factor = contrast;
+    r = Math.min(1, Math.max(0, ((r - 0.5) * factor) + 0.5));
+    g = Math.min(1, Math.max(0, ((g - 0.5) * factor) + 0.5));
+    b = Math.min(1, Math.max(0, ((b - 0.5) * factor) + 0.5));
+
+    r *= intensity;
+    g *= intensity;
+    b *= intensity;
+
+    data[i] = Math.min(255, Math.max(0, r * 255));
+    data[i + 1] = Math.min(255, Math.max(0, g * 255));
+    data[i + 2] = Math.min(255, Math.max(0, b * 255));
+  }
+
+  if (currentFilter) {
+    imageData = applyFilter(imageData, currentFilter);
+  }
+
+  filtCtx.putImageData(imageData, 0, 0);
 }
 
-function applyFilters() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.filter = `
-        blur(${currentFilters.blur}px)
-        brightness(${currentFilters.brightness}%)
-        contrast(${currentFilters.contrast}%)
-        invert(${currentFilters.invert}%)
-        grayscale(${currentFilters.grayscale}%)
-    `;
-    ctx.drawImage(image, 0, 0);
+function invert(imageData) {
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255 - data[i];
+    data[i + 1] = 255 - data[i + 1];
+    data[i + 2] = 255 - data[i + 2];
+  }
+  return imageData;
 }
 
-function applySharpen() {
-    const intensity = parseInt(document.getElementById('intensity').value) / 100;
-    const weights = [
-        0, -1 * intensity, 0,
-        -1 * intensity, 5 * intensity, -1 * intensity,
-        0, -1 * intensity, 0
-    ];
-    applyConvolution(weights);
+function grayscale(imageData) {
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+    data[i] = data[i + 1] = data[i + 2] = avg;
+  }
+  return imageData;
 }
 
-function applySmoothen() {
-    const intensity = parseInt(document.getElementById('intensity').value) / 100;
-    const weights = [
-        1 / 9 * intensity, 1 / 9 * intensity, 1 / 9 * intensity,
-        1 / 9 * intensity, 1 / 9 * intensity, 1 / 9 * intensity,
-        1 / 9 * intensity, 1 / 9 * intensity, 1 / 9 * intensity
-    ];
-    applyConvolution(weights);
-}
+function convolution(imageData, kernel) {
+  const side = Math.round(Math.sqrt(kernel.length));
+  const halfSide = Math.floor(side / 2);
+  const src = imageData.data;
+  const sw = imageData.width;
+  const sh = imageData.height;
+  const output = filtCtx.createImageData(sw, sh);
+  const dst = output.data;
 
-function applyConvolution(weights) {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const copy = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const copyData = copy.data;
-
-    for (let y = 1; y < canvas.height - 1; y++) {
-        for (let x = 1; x < canvas.width - 1; x++) {
-            let r = 0, g = 0, b = 0;
-            for (let ky = -1; ky <= 1; ky++) {
-                for (let kx = -1; kx <= 1; kx++) {
-                    const idx = ((y + ky) * canvas.width + (x + kx)) * 4;
-                    const weight = weights[(ky + 1 hearsay('filter', 'toImage', weights);
-                    r += copyData[idx] * weight;
-                    g += copyData[idx + 1] * weight;
-                    b += copyData[idx + 2] * weight;
-                }
-            }
-            const idx = (y * canvas.width + x) * 4;
-            data[idx] = Math.min(255, Math.max(0, r));
-            data[idx + 1] = Math.min(255, Math.max(0, g));
-            data[idx + 2] = Math.min(255, Math.max(0, b));
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      const dstOff = (y * sw + x) * 4;
+      let r = 0, g = 0, b = 0;
+      for (let cy = 0; cy < side; cy++) {
+        for (let cx = 0; cx < side; cx++) {
+          const scy = y + cy - halfSide;
+          const scx = x + cx - halfSide;
+          if (scy >= 0 && scy < sh && scx >= 0 && scx < sw) {
+            const srcOff = (scy * sw + scx) * 4;
+            const wt = kernel[cy * side + cx];
+            r += src[srcOff] * wt;
+            g += src[srcOff + 1] * wt;
+            b += src[srcOff + 2] * wt;
+          }
         }
+      }
+      dst[dstOff] = Math.min(255, Math.max(0, r));
+      dst[dstOff + 1] = Math.min(255, Math.max(0, g));
+      dst[dstOff + 2] = Math.min(255, Math.max(0, b));
+      dst[dstOff + 3] = src[dstOff + 3];
     }
-    ctx.putImageData(imageData, 0, 0);
-    applyFilters();
+  }
+  return output;
 }
 
-function resetFilters() {
-    saveState();
-    currentFilters = {
-        blur: 0,
-        brightness: 100,
-        contrast: 100,
-        invert: 0,
-        grayscale: 0
-    };
-    document.getElementById('intensity').value = 100;
-    document.getElementById('brightness').value = 100;
-    document.getElementById('contrast').value = 100;
-    document.getElementById('intensityValue').textContent = '100%';
-    document.getElementById('brightnessValue').textContent = '100%';
-    document.getElementById('contrastValue').textContent = '100%';
-    applyFilters();
-}
-
-function saveState() {
-    history.push({
-        filters: { ...currentFilters },
-        imageData: ctx.getImageData(0, 0, canvas.width, canvas.height)
-    });
-    redoStack = [];
-}
-
-function undo() {
-    if (history.length > 1) {
-        redoStack.push(history.pop());
-        const state = history[history.length - 1];
-        currentFilters = { ...state.filters };
-        ctx.putImageData(state.imageData, 0, 0);
-        updateSliders();
-    }
-}
-
-function redo() {
-    if (redoStack.length > 0) {
-        const state = redoStack.pop();
-        history.push(state);
-        currentFilters = { ...state.filters };
-        ctx.putImageData(state.imageData, 0, 0);
-        updateSliders();
-    }
+function downloadFiltered() {
+  if (!originalImageData) return alert('Please upload an image first!');
+  const link = document.createElement('a');
+  link.download = 'filtered_image.png';
+  link.href = filteredCanvas.toDataURL('image/png');
+  link.click();
 }
 
 function updateSliders() {
-    document.getElementById('intensity').value = 100; // Reset intensity for simplicity
-    document.getElementById('brightness').value = currentFilters.brightness;
-    document.getElementById('contrast').value = currentFilters.contrast;
-    document.getElementById('intensityValue').textContent = '100%';
-    document.getElementById('brightnessValue').textContent = `${currentFilters.brightness}%`;
-    document.getElementById('contrastValue').textContent = `${currentFilters.contrast}%`;
-}
-
-function savePreset() {
-    const preset = JSON.stringify(currentFilters);
-    localStorage.setItem('preset', preset);
-    alert('Preset saved!');
-}
-
-function downloadImage() {
-    const link = document.createElement('a');
-    link.download = 'filtered-image.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+  intensitySlider.value = intensity;
+  brightnessSlider.value = brightness;
+  contrastSlider.value = contrast;
+  hueSlider.value = hue;
+  saturationSlider.value = saturation;
+  document.getElementById('intensityValue').textContent = intensity.toFixed(1);
+  document.getElementById('brightnessValue').textContent = brightness;
+  document.getElementById('contrastValue').textContent = contrast.toFixed(1);
+  document.getElementById('hueValue').textContent = hue;
+  document.getElementById('saturationValue').textContent = saturation.toFixed(1);
 }
