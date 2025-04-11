@@ -1,485 +1,211 @@
-// Canvas setup
-const originalCanvas = document.getElementById('originalCanvas');
-const filteredCanvas = document.getElementById('filteredCanvas');
-const origCtx = originalCanvas.getContext('2d');
-const filtCtx = filteredCanvas.getContext('2d');
-
-let originalImageData = null;
-let img = new Image();
-let currentFilter = null;
-let intensity = 1;
-let brightness = 0;
-let contrast = 1;
+const canvas = document.getElementById('imageCanvas');
+const ctx = canvas.getContext('2d');
+let image = new Image();
 let history = [];
-let historyIndex = -1;
-let zoomLevel = 1;
-let panX = 0;
-let panY = 0;
-let isPanning = false;
-let startX, startY;
+let redoStack = [];
+let currentFilters = {
+    blur: 0,
+    brightness: 100,
+    contrast: 100,
+    invert: 0,
+    grayscale: 0
+};
 
-// Initialize UI elements
-const intensitySlider = document.getElementById('intensity');
-const brightnessSlider = document.getElementById('brightness');
-const contrastSlider = document.getElementById('contrast');
-const dropArea = document.getElementById('dropArea');
-const loadingIndicator = document.getElementById('loadingIndicator');
-const controlsPanel = document.getElementById('controlsPanel');
-const toggleControls = document.getElementById('toggleControls');
-const presetSelect = document.getElementById('presetSelect');
-const zoomInBtn = document.getElementById('zoomIn');
-const zoomOutBtn = document.getElementById('zoomOut');
-const resetZoomBtn = document.getElementById('resetZoom');
-const themeToggle = document.getElementById('themeToggle');
+document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
+document.getElementById('intensity').addEventListener('input', updateSliderValue);
+document.getElementById('brightness').addEventListener('input', updateSliderValue);
+document.getElementById('contrast').addEventListener('input', updateSliderValue);
 
-function showLoading() {
-  loadingIndicator.style.display = 'flex';
+// Drag and Drop
+const uploadSection = document.querySelector('.upload-section');
+uploadSection.addEventListener('dragover', (e) => e.preventDefault());
+uploadSection.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+        loadImage(file);
+    } else {
+        alert('Please upload a valid image file.');
+    }
+});
+
+function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (file && file.type.startsWith('image/')) {
+        loadImage(file);
+    } else {
+        alert('Please upload a valid image file.');
+    }
 }
 
-function hideLoading() {
-  loadingIndicator.style.display = 'none';
+function loadImage(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+        image.src = reader.result;
+        image.onload = () => {
+            canvas.width = image.width;
+            canvas.height = image.height;
+            document.querySelector('.canvas-placeholder').style.display = 'none';
+            resetFilters();
+        };
+    };
+    reader.readAsDataURL(file);
 }
 
-function adjustCanvasSizes(width, height) {
-  originalCanvas.width = filteredCanvas.width = width;
-  originalCanvas.height = filteredCanvas.height = height;
-  updateCanvas();
+function updateSliderValue(e) {
+    const id = e.target.id;
+    const value = e.target.value;
+    document.getElementById(`${id}Value`).textContent = `${value}%`;
+    currentFilters[id] = value;
+    applyFilters();
+}
+
+function applyFilter(filter) {
+    saveState();
+    switch (filter) {
+        case 'blur':
+            currentFilters.blur = parseInt(document.getElementById('intensity').value) / 10;
+            break;
+        case 'sharpen':
+            applySharpen();
+            break;
+        case 'invert':
+            currentFilters.invert = currentFilters.invert ? 0 : 100;
+            break;
+        case 'smoothen':
+            applySmoothen();
+            break;
+        case 'grayscale':
+            currentFilters.grayscale = currentFilters.grayscale ? 0 : 100;
+            break;
+    }
+    applyFilters();
+}
+
+function applyFilters() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.filter = `
+        blur(${currentFilters.blur}px)
+        brightness(${currentFilters.brightness}%)
+        contrast(${currentFilters.contrast}%)
+        invert(${currentFilters.invert}%)
+        grayscale(${currentFilters.grayscale}%)
+    `;
+    ctx.drawImage(image, 0, 0);
+}
+
+function applySharpen() {
+    const intensity = parseInt(document.getElementById('intensity').value) / 100;
+    const weights = [
+        0, -1 * intensity, 0,
+        -1 * intensity, 5 * intensity, -1 * intensity,
+        0, -1 * intensity, 0
+    ];
+    applyConvolution(weights);
+}
+
+function applySmoothen() {
+    const intensity = parseInt(document.getElementById('intensity').value) / 100;
+    const weights = [
+        1 / 9 * intensity, 1 / 9 * intensity, 1 / 9 * intensity,
+        1 / 9 * intensity, 1 / 9 * intensity, 1 / 9 * intensity,
+        1 / 9 * intensity, 1 / 9 * intensity, 1 / 9 * intensity
+    ];
+    applyConvolution(weights);
+}
+
+function applyConvolution(weights) {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const copy = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const copyData = copy.data;
+
+    for (let y = 1; y < canvas.height - 1; y++) {
+        for (let x = 1; x < canvas.width - 1; x++) {
+            let r = 0, g = 0, b = 0;
+            for (let ky = -1; ky <= 1; ky++) {
+                for (let kx = -1; kx <= 1; kx++) {
+                    const idx = ((y + ky) * canvas.width + (x + kx)) * 4;
+                    const weight = weights[(ky + 1 hearsay('filter', 'toImage', weights);
+                    r += copyData[idx] * weight;
+                    g += copyData[idx + 1] * weight;
+                    b += copyData[idx + 2] * weight;
+                }
+            }
+            const idx = (y * canvas.width + x) * 4;
+            data[idx] = Math.min(255, Math.max(0, r));
+            data[idx + 1] = Math.min(255, Math.max(0, g));
+            data[idx + 2] = Math.min(255, Math.max(0, b));
+        }
+    }
+    ctx.putImageData(imageData, 0, 0);
+    applyFilters();
+}
+
+function resetFilters() {
+    saveState();
+    currentFilters = {
+        blur: 0,
+        brightness: 100,
+        contrast: 100,
+        invert: 0,
+        grayscale: 0
+    };
+    document.getElementById('intensity').value = 100;
+    document.getElementById('brightness').value = 100;
+    document.getElementById('contrast').value = 100;
+    document.getElementById('intensityValue').textContent = '100%';
+    document.getElementById('brightnessValue').textContent = '100%';
+    document.getElementById('contrastValue').textContent = '100%';
+    applyFilters();
 }
 
 function saveState() {
-  history = history.slice(0, historyIndex + 1);
-  history.push({
-    filter: currentFilter,
-    intensity,
-    brightness,
-    contrast,
-    imageData: filtCtx.getImageData(0, 0, filteredCanvas.width, filteredCanvas.height)
-  });
-  historyIndex++;
+    history.push({
+        filters: { ...currentFilters },
+        imageData: ctx.getImageData(0, 0, canvas.width, canvas.height)
+    });
+    redoStack = [];
 }
 
 function undo() {
-  if (historyIndex > 0) {
-    historyIndex--;
-    const state = history[historyIndex];
-    currentFilter = state.filter;
-    intensity = state.intensity;
-    brightness = state.brightness;
-    contrast = state.contrast;
-    filtCtx.putImageData(state.imageData, 0, 0);
-    updateSliders();
-  }
+    if (history.length > 1) {
+        redoStack.push(history.pop());
+        const state = history[history.length - 1];
+        currentFilters = { ...state.filters };
+        ctx.putImageData(state.imageData, 0, 0);
+        updateSliders();
+    }
 }
 
 function redo() {
-  if (historyIndex < history.length - 1) {
-    historyIndex++;
-    const state = history[historyIndex];
-    currentFilter = state.filter;
-    intensity = state.intensity;
-    brightness = state.brightness;
-    contrast = state.contrast;
-    filtCtx.putImageData(state.imageData, 0, 0);
-    updateSliders();
-  }
+    if (redoStack.length > 0) {
+        const state = redoStack.pop();
+        history.push(state);
+        currentFilters = { ...state.filters };
+        ctx.putImageData(state.imageData, 0, 0);
+        updateSliders();
+    }
 }
 
 function updateSliders() {
-  intensitySlider.value = intensity;
-  brightnessSlider.value = brightness;
-  contrastSlider.value = contrast;
-  document.getElementById('intensityValue').textContent = intensity.toFixed(1);
-  document.getElementById('brightnessValue').textContent = brightness;
-  document.getElementById('contrastValue').textContent = contrast.toFixed(1);
+    document.getElementById('intensity').value = 100; // Reset intensity for simplicity
+    document.getElementById('brightness').value = currentFilters.brightness;
+    document.getElementById('contrast').value = currentFilters.contrast;
+    document.getElementById('intensityValue').textContent = '100%';
+    document.getElementById('brightnessValue').textContent = `${currentFilters.brightness}%`;
+    document.getElementById('contrastValue').textContent = `${currentFilters.contrast}%`;
 }
 
-// Image upload handling
-document.getElementById('upload').addEventListener('change', function(e) {
-  handleImageUpload(e.target.files[0]);
-});
-
-// Drag and drop handling
-dropArea.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropArea.classList.add('dragover');
-});
-
-dropArea.addEventListener('dragleave', () => {
-  dropArea.classList.remove('dragover');
-});
-
-dropArea.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropArea.classList.remove('dragover');
-  handleImageUpload(e.dataTransfer.files[0]);
-});
-
-function handleImageUpload(file) {
-  if (file) {
-    showLoading();
-    const reader = new FileReader();
-    reader.onload = function(event) {
-      img.onload = function() {
-        const maxWidth = 600;
-        const maxHeight = 600;
-        let width = img.width;
-        let height = img.height;
-        const scaleFactor = Math.min(maxWidth / width, maxHeight / height, 1);
-        width = width * scaleFactor;
-        height = height * scaleFactor;
-        
-        adjustCanvasSizes(width, height);
-        origCtx.drawImage(img, 0, 0, width, height);
-        filtCtx.drawImage(img, 0, 0, width, height);
-        originalImageData = origCtx.getImageData(0, 0, width, height);
-        resetFiltered();
-        hideLoading();
-      };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-}
-
-// Slider event listeners
-intensitySlider.addEventListener('input', function(e) {
-  intensity = parseFloat(e.target.value);
-  document.getElementById('intensityValue').textContent = intensity.toFixed(1);
-  applyAdjustments();
-});
-
-brightnessSlider.addEventListener('input', function(e) {
-  brightness = parseInt(e.target.value);
-  document.getElementById('brightnessValue').textContent = brightness;
-  applyAdjustments();
-});
-
-contrastSlider.addEventListener('input', function(e) {
-  contrast = parseFloat(e.target.value);
-  document.getElementById('contrastValue').textContent = contrast.toFixed(1);
-  applyAdjustments();
-});
-
-// Zoom and Pan
-zoomInBtn.addEventListener('click', () => {
-  zoomLevel *= 1.2;
-  updateCanvas();
-});
-
-zoomOutBtn.addEventListener('click', () => {
-  zoomLevel /= 1.2;
-  if (zoomLevel < 0.1) zoomLevel = 0.1;
-  updateCanvas();
-});
-
-resetZoomBtn.addEventListener('click', () => {
-  zoomLevel = 1;
-  panX = 0;
-  panY = 0;
-  updateCanvas();
-});
-
-filteredCanvas.addEventListener('mousedown', (e) => {
-  isPanning = true;
-  startX = e.offsetX - panX;
-  startY = e.offsetY - panY;
-});
-
-filteredCanvas.addEventListener('mousemove', (e) => {
-  if (isPanning) {
-    panX = e.offsetX - startX;
-    panY = e.offsetY - startY;
-    updateCanvas();
-  }
-});
-
-filteredCanvas.addEventListener('mouseup', () => {
-  isPanning = false;
-});
-
-filteredCanvas.addEventListener('mouseleave', () => {
-  isPanning = false;
-});
-
-function updateCanvas() {
-  origCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
-  filtCtx.clearRect(0, 0, filteredCanvas.width, filteredCanvas.height);
-  
-  origCtx.setTransform(1, 0, 0, 1, 0, 0);
-  filtCtx.setTransform(1, 0, 0, 1, 0, 0);
-  
-  origCtx.translate(panX, panY);
-  filtCtx.translate(panX, panY);
-  
-  origCtx.scale(zoomLevel, zoomLevel);
-  filtCtx.scale(zoomLevel, zoomLevel);
-  
-  if (img.complete) {
-    origCtx.drawImage(img, 0, 0, originalCanvas.width / zoomLevel, originalCanvas.height / zoomLevel);
-  }
-  if (originalImageData) {
-    applyAdjustments();
-  }
-}
-
-// Filter handling
-function previewFilter(filter) {
-  if (originalImageData) {
-    let tempData = filtCtx.createImageData(originalImageData.width, originalImageData.height);
-    tempData.data.set(new Uint8ClampedArray(originalImageData.data));
-    tempData = applyFilter(tempData, filter);
-    filtCtx.putImageData(tempData, 0, 0);
-  }
-}
-
-function clearPreview() {
-  if (originalImageData) {
-    applyAdjustments();
-  }
-}
-
-function handleFilter(filter) {
-  if (currentFilter === filter) {
-    console.log(`${filter} filter is already applied.`);
-    return;
-  }
-  showLoading();
-  currentFilter = filter;
-  applyAdjustments();
-  saveState();
-  hideLoading();
-}
-
-function resetFiltered() {
-  if (originalImageData) {
-    showLoading();
-    filtCtx.putImageData(originalImageData, 0, 0);
-    currentFilter = null;
-    intensity = 1;
-    brightness = 0;
-    contrast = 1;
-    updateSliders();
-    saveState();
-    hideLoading();
-  }
-}
-
-// Filter application
-function applyFilter(imageData, filter) {
-  let output = imageData;
-  switch (filter) {
-    case 'blur':
-      output = convolution(imageData, [1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9]);
-      break;
-    case 'sharpen':
-      output = convolution(imageData, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
-      break;
-    case 'invert':
-      output = invert(imageData);
-      break;
-    case 'smooth':
-      output = convolution(imageData, [1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9, 1/9]);
-      break;
-    case 'grayscale':
-      output = grayscale(imageData);
-      break;
-    case 'sepia':
-      output = sepia(imageData);
-      break;
-    case 'edge':
-      output = convolution(imageData, [-1, -1, -1, -1, 8, -1, -1, -1, -1]);
-      break;
-    case 'emboss':
-      output = convolution(imageData, [-2, -1, 0, -1, 1, 1, 0, 1, 2]);
-      break;
-    case 'posterize':
-      output = posterize(imageData);
-      break;
-  }
-  return output;
-}
-
-function invert(imageData) {
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = 255 - data[i];
-    data[i + 1] = 255 - data[i + 1];
-    data[i + 2] = 255 - data[i + 2];
-  }
-  return imageData;
-}
-
-function grayscale(imageData) {
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-    data[i] = data[i + 1] = data[i + 2] = avg;
-  }
-  return imageData;
-}
-
-function sepia(imageData) {
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    data[i] = Math.min(255, (r * 0.393) + (g * 0.769) + (b * 0.189));
-    data[i + 1] = Math.min(255, (r * 0.349) + (g * 0.686) + (b * 0.168));
-    data[i + 2] = Math.min(255, (r * 0.272) + (g * 0.534) + (b * 0.131));
-  }
-  return imageData;
-}
-
-function posterize(imageData) {
-  const data = imageData.data;
-  const levels = 4;
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = Math.floor(data[i] / (255 / levels)) * (255 / levels);
-    data[i + 1] = Math.floor(data[i + 1] / (255 / levels)) * (255 / levels);
-    data[i + 2] = Math.floor(data[i + 2] / (255 / levels)) * (255 / levels);
-  }
-  return imageData;
-}
-
-function convolution(imageData, kernel) {
-  const side = Math.round(Math.sqrt(kernel.length));
-  const halfSide = Math.floor(side / 2);
-  const src = imageData.data;
-  const sw = imageData.width;
-  const sh = imageData.height;
-  const output = filtCtx.createImageData(sw, sh);
-  const dst = output.data;
-
-  for (let y = 0; y < sh; y++) {
-    for (let x = 0; x < sw; x++) {
-      const dstOff = (y * sw + x) * 4;
-      let r = 0, g = 0, b = 0;
-      for (let cy = 0; cy < side; cy++) {
-        for (let cx = 0; cx < side; cx++) {
-          const scy = y + cy - halfSide;
-          const scx = x + cx - halfSide;
-          if (scy >= 0 && scy < sh && scx >= 0 && scx < sw) {
-            const srcOff = (scy * sw + scx) * 4;
-            const wt = kernel[cy * side + cx];
-            r += src[srcOff] * wt;
-            g += src[srcOff + 1] * wt;
-            b += src[srcOff + 2] * wt;
-          }
-        }
-      }
-      dst[dstOff] = Math.min(255, Math.max(0, r));
-      dst[dstOff + 1] = Math.min(255, Math.max(0, g));
-      dst[dstOff + 2] = Math.min(255, Math.max(0, b));
-      dst[dstOff + 3] = src[dstOff + 3];
-    }
-  }
-  return output;
-}
-
-// Adjustments
-function applyAdjustments() {
-  if (!originalImageData) return;
-  
-  showLoading();
-  let imageData = filtCtx.createImageData(originalImageData.width, originalImageData.height);
-  imageData.data.set(new Uint8ClampedArray(originalImageData.data));
-  let data = imageData.data;
-  
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = Math.min(255, Math.max(0, data[i] + brightness));
-    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + brightness));
-    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + brightness));
-    
-    let factor = contrast;
-    data[i] = Math.min(255, Math.max(0, ((data[i] - 128) * factor) + 128));
-    data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - 128) * factor) + 128));
-    data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - 128) * factor) + 128));
-    
-    data[i] = Math.min(255, Math.max(0, data[i] * intensity));
-    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] * intensity));
-    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] * intensity));
-  }
-  
-  if (currentFilter) {
-    imageData = applyFilter(imageData, currentFilter);
-  }
-  
-  filtCtx.putImageData(imageData, 0, 0);
-  saveState();
-  hideLoading();
-}
-
-// Presets
 function savePreset() {
-  const name = document.getElementById('presetName').value;
-  if (!name) return alert('Please enter a preset name');
-  const preset = { name, filter: currentFilter, intensity, brightness, contrast };
-  let presets = JSON.parse(localStorage.getItem('presets') || '[]');
-  presets.push(preset);
-  localStorage.setItem('presets', JSON.stringify(presets));
-  updatePresetSelect();
-  document.getElementById('presetName').value = '';
+    const preset = JSON.stringify(currentFilters);
+    localStorage.setItem('preset', preset);
+    alert('Preset saved!');
 }
 
-function loadPreset() {
-  const value = presetSelect.value;
-  if (!value) return;
-  const presets = JSON.parse(localStorage.getItem('presets') || '[]');
-  const preset = presets.find(p => p.name === value);
-  if (preset) {
-    currentFilter = preset.filter;
-    intensity = preset.intensity;
-    brightness = preset.brightness;
-    contrast = preset.contrast;
-    updateSliders();
-    applyAdjustments();
-  }
+function downloadImage() {
+    const link = document.createElement('a');
+    link.download = 'filtered-image.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
 }
-
-function updatePresetSelect() {
-  const presets = JSON.parse(localStorage.getItem('presets') || '[]');
-  presetSelect.innerHTML = '<option value="">Select Preset</option>';
-  presets.forEach(preset => {
-    const option = document.createElement('option');
-    option.value = preset.name;
-    option.textContent = preset.name;
-    presetSelect.appendChild(option);
-  });
-}
-
-// Download
-function downloadFiltered() {
-  if (!originalImageData) return alert('Please upload an image first!');
-  const link = document.createElement('a');
-  link.download = 'filtered_image.png';
-  link.href = filteredCanvas.toDataURL('image/png');
-  link.click();
-}
-
-// Toggle controls
-toggleControls.addEventListener('click', () => {
-  controlsPanel.classList.toggle('collapsed');
-  toggleControls.textContent = controlsPanel.classList.contains('collapsed') ? 'Show Controls' : 'Hide Controls';
-});
-
-// Dark mode
-themeToggle.addEventListener('click', () => {
-  document.body.classList.toggle('dark-mode');
-  themeToggle.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
-});
-
-// Keyboard shortcuts
-document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === 'z') {
-    e.preventDefault();
-    undo();
-  }
-  if (e.ctrlKey && e.key === 'y') {
-    e.preventDefault();
-    redo();
-  }
-});
-
-// Initialize presets
-updatePresetSelect();
